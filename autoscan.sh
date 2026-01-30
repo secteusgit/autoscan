@@ -9,13 +9,13 @@ NC='\033[0m'
 
 usage() {
   echo -e "${BLUE}AutoScan v$VERSION${NC}"
-  echo "Uso: autoscan -t <target> [-o output] [--fast]"
+  echo "Uso: ./autoscan.sh -t <target> [-o output] [--fast]"
   echo
   echo "Opções:"
-  echo "  -t    Alvo (domínio ou IP)"
-  echo "  -o    Diretório de saída (default: scans)"
-  echo "  --fast  Scan rápido (pula enumeração pesada)"
-  echo "  -h    Ajuda"
+  echo "  -t        Alvo (domínio ou IP)"
+  echo "  -o        Diretório de saída (default: scans)"
+  echo "  --fast    Scan rápido (pula Nuclei)"
+  echo "  -h        Ajuda"
   exit 1
 }
 
@@ -30,46 +30,45 @@ FAST=false
 OUTPUT="scans"
 
 while [[ $# -gt 0 ]]; do
-  case $1 in
-    -t) TARGET="$2"; shift ;;
-    -o) OUTPUT="$2"; shift ;;
-    --fast) FAST=true ;;
+  case "$1" in
+    -t) TARGET="$2"; shift 2 ;;
+    -o) OUTPUT="$2"; shift 2 ;;
+    --fast) FAST=true; shift ;;
     -h) usage ;;
     *) usage ;;
   esac
-  shift
 done
 
 [ -z "$TARGET" ] && usage
 
 echo -e "${GREEN}[+] Iniciando AutoScan v$VERSION${NC}"
+echo "[*] Alvo: $TARGET"
+echo "[*] Output: $OUTPUT/$TARGET"
+echo "[*] FAST mode: $FAST"
 
 for tool in assetfinder httpx nmap nuclei; do
-  check_tool $tool
+  check_tool "$tool"
 done
 
 OUTDIR="$OUTPUT/$TARGET"
 mkdir -p "$OUTDIR"
 
-echo -e "${BLUE}[*] Alvo:${NC} $TARGET"
-echo -e "${BLUE}[*] Output:${NC} $OUTDIR"
+echo -e "${BLUE}[+] Resultados em: $OUTDIR${NC}"
+
+echo -e "${GREEN}[+] Coletando subdomínios...${NC}"
+assetfinder --subs-only "$TARGET" > "$OUTDIR/subdomains.txt"
+
+echo -e "${GREEN}[+] Verificando serviços HTTP...${NC}"
+cat "$OUTDIR/subdomains.txt" | httpx -silent > "$OUTDIR/http_services.txt"
+
+echo -e "${GREEN}[+] Executando Nmap...${NC}"
+nmap -sS -T4 "$TARGET" -oN "$OUTDIR/nmap.txt"
 
 if [ "$FAST" = false ]; then
-  echo -e "${GREEN}[+] Coletando subdomínios...${NC}"
-  assetfinder "$TARGET" | sort -u > "$OUTDIR/subdomains.txt"
+  echo -e "${GREEN}[+] Executando Nuclei...${NC}"
+  nuclei -l "$OUTDIR/http_services.txt" -o "$OUTDIR/nuclei.txt"
 else
-  echo -e "${BLUE}[*] FAST mode: pulando subdomínios${NC}"
-  echo "$TARGET" > "$OUTDIR/subdomains.txt"
+  echo -e "${BLUE}[i] FAST ativado — Nuclei pulado${NC}"
 fi
 
-echo -e "${GREEN}[+] Verificando hosts ativos...${NC}"
-cat "$OUTDIR/subdomains.txt" | httpx -silent > "$OUTDIR/httpx.txt"
-
-echo -e "${GREEN}[+] Rodando Nmap...${NC}"
-nmap -sV -T4 "$TARGET" -oN "$OUTDIR/nmap.txt" >/dev/null
-
-echo -e "${GREEN}[+] Rodando Nuclei...${NC}"
-nuclei -l "$OUTDIR/httpx.txt" -o "$OUTDIR/nuclei.txt" >/dev/null
-
-echo -e "${GREEN}[✔] Scan finalizado!${NC}"
-echo -e "${BLUE}Resultados em:${NC} $OUTDIR"
+echo -e "${GREEN}[✓] Scan finalizado${NC}"

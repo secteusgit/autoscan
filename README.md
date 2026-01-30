@@ -31,3 +31,4 @@ As seguintes ferramentas devem estar instaladas:
 Instalação no Kali Linux:
 ```bash
 sudo apt update && sudo apt install -y nmap curl whois dnsutils
+
