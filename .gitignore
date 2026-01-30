@@ -1,0 +1,9 @@
+# binaries / tools
+go/
+bin/
+tools/
+*.bin
+
+# editor / OS
+.vscode/
+.DS_Store
